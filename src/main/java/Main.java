@@ -13,8 +13,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
         SkribblServer skribblServer = new SkribblServer();
 
-        System.out.println(skribblServer.getServerSocket().getInetAddress());
-
+        System.out.println("Server reachable at: " + skribblServer.getServerSocket().getInetAddress());
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> skribblServer.run());
     }
