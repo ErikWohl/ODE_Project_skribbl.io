@@ -59,7 +59,7 @@ public class SkribblServer implements Runnable, ServerObserver{
                     skribblClient.setServerObserver(this);
                     clientMap.put(skribblClient.getuUID(), skribblClient);
                     executor.submit(() -> skribblClient.run());
-                    printWriter.println("Hello Client");
+                    printWriter.println("MSGHello Client");
                 } finally {
                     lock.writeLock().unlock();
                 }
@@ -72,7 +72,7 @@ public class SkribblServer implements Runnable, ServerObserver{
 
     @Override
     public void onCrash(String UUID) {
-        logger.info("Server: Removing client (" + UUID + ") from list.");
+        logger.info("Removing client (" + UUID + ") from list.");
         ReadWriteLock lock = new ReentrantReadWriteLock();
         lock.writeLock().lock();
         try {
@@ -83,12 +83,33 @@ public class SkribblServer implements Runnable, ServerObserver{
     }
 
     @Override
-    public void echo(String UUID, String msg) {
-        logger.info("Echo: " + msg);
+    public void unicast(String UUID, String msg) {
+        logger.trace("Sending unicast to Client (" + UUID + ") sent: " + msg);
+        clientMap.get(UUID).getPrintWriter().println(msg);
+    }
+
+    @Override
+    public void multicast(String UUID, String msg) {
         for(var client : clientMap.entrySet()) {
             if(client.getKey() != UUID) {
-                client.getValue().getPrintWriter().println("Client (" + UUID + ") sent: " + msg);
+                logger.trace("Sending multicast to Client (" + UUID + ") sent: " + msg);
+                client.getValue().getPrintWriter().println(msg);
             }
         }
+    }
+
+    @Override
+    public void startGame() {
+
+    }
+
+    @Override
+    public void startRound() {
+
+    }
+
+    @Override
+    public void endRound() {
+
     }
 }

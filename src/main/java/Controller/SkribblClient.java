@@ -45,11 +45,38 @@ public class SkribblClient implements Runnable {
             bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
             do {
                 String message = bufferedReader.readLine();
-                logger.info("Server: Message from Client (" + uUID + "): " + message);
-                serverObserver.echo(uUID, message);
+                logger.trace("Message from Client (" + uUID + "): " + message);
+
+                // Abarbeitung der frontend commands
+                // Commands sind immer 3 Zeichen lang.
+                String command = message.substring(0, 3);
+                CommandEnum commandEnum = CommandEnum.fromString(command);
+                switch (commandEnum) {
+                    case MESSAGE: {
+                        serverObserver.multicast(uUID, message);
+                        break;
+                    }
+                    case DRAWING: {
+                        //todo: Nur vor Rundenbeginn oder wenn man Zeichner ist
+                        serverObserver.multicast(uUID, message);
+                        break;
+                    }
+                }
+
+
+
+
+
+
+
+
+
+
+
+                //serverObserver.onIncomingMessage(uUID, message);
             } while (true);
         }catch (IOException e) {
-            logger.info("Server: Connection to client (" + uUID + ") lost.");
+            logger.info("Connection to client (" + uUID + ") lost.");
             serverObserver.onCrash(uUID);
         }
     }
