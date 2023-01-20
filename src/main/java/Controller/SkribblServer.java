@@ -2,9 +2,12 @@ package Controller;
 
 import java.net.*;
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.logging.log4j.Logger;
@@ -15,8 +18,10 @@ public class SkribblServer implements Runnable, ServerObserver{
     private int port = 8080;
     private ServerSocket serverSocket;
     private Map<String, SkribblClient> clientMap = new HashMap<>();
+    private ThreadPoolExecutor executor;
     public SkribblServer() throws IOException {
         this.serverSocket = new ServerSocket(port);
+        this.executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
     }
 
     public int getPort() {
@@ -48,19 +53,17 @@ public class SkribblServer implements Runnable, ServerObserver{
                 try {
                     SkribblClient skribblClient = new SkribblClient(client);
                     skribblClient.setUUID(UUID.randomUUID().toString());
+                    PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+                    skribblClient.setPrintWriter(printWriter);
                     // verbindung mit Server für crash
                     skribblClient.setServerObserver(this);
                     clientMap.put(skribblClient.getuUID(), skribblClient);
-                    Thread thread = new Thread(() -> skribblClient.run());
-                    thread.start();
+                    executor.submit(() -> skribblClient.run());
+                    printWriter.println("MSGHello Client");
                 } finally {
                     lock.writeLock().unlock();
                 }
-
                 logger.info("Client accepted: " + client.getRemoteSocketAddress().toString());
-
-                PrintWriter printWriter = new PrintWriter(client.getOutputStream(), true);
-                printWriter.println("Hello Client");
             } while (true);
         }catch (Exception e) {
             logger.error("Error log message", e);
@@ -69,7 +72,7 @@ public class SkribblServer implements Runnable, ServerObserver{
 
     @Override
     public void onCrash(String UUID) {
-        logger.info("Server: Removing client (" + UUID + ") from list.");
+        logger.info("Removing client (" + UUID + ") from list.");
         ReadWriteLock lock = new ReentrantReadWriteLock();
         lock.writeLock().lock();
         try {
@@ -80,17 +83,33 @@ public class SkribblServer implements Runnable, ServerObserver{
     }
 
     @Override
-    public void echo(String UUID, String msg) {
-        for(var client : clientMap.entrySet()) {
-            if(client.getKey() != UUID) {
-                try {
-                    PrintWriter printWriter = new PrintWriter(client.getValue().getClientSocket().getOutputStream(), true);
-                    printWriter.println("Client (" + UUID + ") sent: " + msg);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+    public void unicast(String UUID, String msg) {
+        logger.trace("Sending unicast to Client (" + UUID + ") sent: " + msg);
+        clientMap.get(UUID).getPrintWriter().println(msg);
+    }
 
+    @Override
+    public void multicast(String UUID, String msg) {
+        for(var client : clientMap.entrySet()) {
+            if(!client.getKey().equals(UUID)) {
+                logger.trace("Sending multicast to Client (" + client.getKey() + ") sent: " + msg);
+                client.getValue().getPrintWriter().println(msg);
             }
         }
+    }
+
+    @Override
+    public void startGame() {
+
+    }
+
+    @Override
+    public void startRound() {
+
+    }
+
+    @Override
+    public void endRound() {
+
     }
 }
