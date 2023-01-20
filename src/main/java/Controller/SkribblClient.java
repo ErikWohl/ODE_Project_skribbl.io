@@ -6,7 +6,7 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-
+import Controller.Service.ClientObserver;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 public class SkribblClient implements Runnable {
@@ -15,8 +15,9 @@ public class SkribblClient implements Runnable {
     private String uUID;
     private PrintWriter printWriter;
     private BufferedReader bufferedReader;
+    private ClientObserver clientObserver;
 
-    private ServerObserver serverObserver;
+
     public SkribblClient(Socket clientSocket) {
         this.clientSocket = clientSocket;
     }
@@ -26,8 +27,8 @@ public class SkribblClient implements Runnable {
     public void setUUID(String uUID) {
         this.uUID = uUID;
     }
-    public void setServerObserver(ServerObserver serverObserver) {
-        this.serverObserver = serverObserver;
+    public void setClientObserver(ClientObserver clientObserver) {
+        this.clientObserver = clientObserver;
     }
     public PrintWriter getPrintWriter() {
         return printWriter;
@@ -38,7 +39,6 @@ public class SkribblClient implements Runnable {
     public Socket getClientSocket() {
         return clientSocket;
     }
-
     @Override
     public void run() {
         try {
@@ -47,40 +47,12 @@ public class SkribblClient implements Runnable {
                 String message = bufferedReader.readLine();
                 logger.trace("Message from Client (" + uUID + "): " + message);
                 message = message.replace("\uFEFF", "");
-
-                // Abarbeitung der frontend commands
-                // Commands sind immer 3 Zeichen lang.
-                String command = message.substring(0, 3);
-                CommandEnum commandEnum = CommandEnum.fromString(command);
-                switch (commandEnum) {
-                    case MESSAGE: {
-                        serverObserver.multicast(uUID, message);
-                        break;
-                    }
-                    // Wird gleich wie Drawing abgearbeitet
-                    case CLEAR:
-                    case DRAWING: {
-                        //todo: Nur vor Rundenbeginn oder wenn man Zeichner ist
-                        serverObserver.multicast(uUID, message);
-                        break;
-                    }
-                }
-
-
-
-
-
-
-
-
-
-
-
-                //serverObserver.onIncomingMessage(uUID, message);
+                clientObserver.processMessage(uUID, message);
             } while (true);
         }catch (IOException e) {
             logger.info("Connection to client (" + uUID + ") lost.");
-            serverObserver.onCrash(uUID);
+            clientObserver.onCrash(uUID);
         }
     }
+
 }

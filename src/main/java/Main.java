@@ -1,3 +1,4 @@
+import Controller.Service.GameService;
 import Controller.SkribblServer;
 
 import java.io.IOException;
@@ -18,6 +19,9 @@ import java.util.concurrent.Executors;
 public class Main {
     public static void main(String[] args) throws IOException {
         SkribblServer skribblServer = new SkribblServer();
+
+        GameService gameService = new GameService();
+        gameService.setGameObserver(skribblServer);
 
         System.out.println("Server reachable at: " + skribblServer.getServerSocket().getInetAddress());
         ExecutorService executor = Executors.newSingleThreadExecutor();

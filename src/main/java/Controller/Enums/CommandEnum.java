@@ -1,4 +1,4 @@
-package Controller;
+package Controller.Enums;
 
 public enum CommandEnum {
     // Controller Commands

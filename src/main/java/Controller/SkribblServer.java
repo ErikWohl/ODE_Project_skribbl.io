@@ -10,15 +10,18 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import Controller.Service.GameService;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 
-public class SkribblServer implements Runnable, ServerObserver{
+public class SkribblServer implements Runnable, GameObserver {
     private Logger logger = LogManager.getLogger(SkribblServer.class);
     private int port = 8080;
     private ServerSocket serverSocket;
     private Map<String, SkribblClient> clientMap = new HashMap<>();
     private ThreadPoolExecutor executor;
+    private GameService gameService;
     public SkribblServer() throws IOException {
         this.serverSocket = new ServerSocket(port);
         this.executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
@@ -40,6 +43,9 @@ public class SkribblServer implements Runnable, ServerObserver{
         this.serverSocket = serverSocket;
     }
 
+    public void setGameService(GameService gameService) {
+        this.gameService = gameService;
+    }
     @Override
     public void run() {
         ReadWriteLock lock = new ReentrantReadWriteLock();
@@ -56,7 +62,7 @@ public class SkribblServer implements Runnable, ServerObserver{
                     PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
                     skribblClient.setPrintWriter(printWriter);
                     // verbindung mit Server für crash
-                    skribblClient.setServerObserver(this);
+                    skribblClient.setClientObserver(gameService);
                     clientMap.put(skribblClient.getuUID(), skribblClient);
                     executor.submit(() -> skribblClient.run());
                     printWriter.println("MSGHello Client");
