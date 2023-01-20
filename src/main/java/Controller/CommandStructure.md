@@ -11,5 +11,6 @@ values ... <br> werden je nach Befehl anders abgearbeitet
 
 ## Clientside
 •	Message: MSG|text<br>
-•	Drawing: DRW|x1;y1;x2;y2<br>
+•	Drawing: DRW|x1;y1;x2;y2;size;color<br>
+•	Clear: CLR|<br>
 •	Start game: STG|<br>

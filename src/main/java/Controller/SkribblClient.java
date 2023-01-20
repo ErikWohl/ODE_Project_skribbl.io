@@ -56,6 +56,8 @@ public class SkribblClient implements Runnable {
                         serverObserver.multicast(uUID, message);
                         break;
                     }
+                    // Wird gleich wie Drawing abgearbeitet
+                    case CLEAR:
                     case DRAWING: {
                         //todo: Nur vor Rundenbeginn oder wenn man Zeichner ist
                         serverObserver.multicast(uUID, message);
