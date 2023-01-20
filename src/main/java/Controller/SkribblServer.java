@@ -91,8 +91,8 @@ public class SkribblServer implements Runnable, ServerObserver{
     @Override
     public void multicast(String UUID, String msg) {
         for(var client : clientMap.entrySet()) {
-            if(client.getKey() != UUID) {
-                logger.trace("Sending multicast to Client (" + UUID + ") sent: " + msg);
+            if(!client.getKey().equals(UUID)) {
+                logger.trace("Sending multicast to Client (" + client.getKey() + ") sent: " + msg);
                 client.getValue().getPrintWriter().println(msg);
             }
         }
