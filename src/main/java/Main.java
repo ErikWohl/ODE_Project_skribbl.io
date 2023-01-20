@@ -22,7 +22,7 @@ public class Main {
 
         GameService gameService = new GameService();
         gameService.setGameObserver(skribblServer);
-
+        skribblServer.setGameService(gameService);
         System.out.println("Server reachable at: " + skribblServer.getServerSocket().getInetAddress());
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> skribblServer.run());
