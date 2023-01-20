@@ -46,6 +46,7 @@ public class SkribblClient implements Runnable {
             do {
                 String message = bufferedReader.readLine();
                 logger.trace("Message from Client (" + uUID + "): " + message);
+                message = message.replace("\uFEFF", "");
 
                 // Abarbeitung der frontend commands
                 // Commands sind immer 3 Zeichen lang.
