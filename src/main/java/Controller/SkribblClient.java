@@ -12,7 +12,7 @@ import org.apache.logging.log4j.LogManager;
 public class SkribblClient implements Runnable {
     private Logger logger = LogManager.getLogger(SkribblClient.class);
     private Socket clientSocket;
-    private String uUID;
+    private String UUID;
     private PrintWriter printWriter;
     private BufferedReader bufferedReader;
     private ClientObserver clientObserver;
@@ -21,11 +21,11 @@ public class SkribblClient implements Runnable {
     public SkribblClient(Socket clientSocket) {
         this.clientSocket = clientSocket;
     }
-    public String getuUID() {
-        return uUID;
+    public String getUUID() {
+        return UUID;
     }
-    public void setUUID(String uUID) {
-        this.uUID = uUID;
+    public void setUUID(String UUID) {
+        this.UUID = UUID;
     }
     public void setClientObserver(ClientObserver clientObserver) {
         this.clientObserver = clientObserver;
@@ -43,15 +43,16 @@ public class SkribblClient implements Runnable {
     public void run() {
         try {
             bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
+            clientObserver.onStart(UUID);
             do {
                 String message = bufferedReader.readLine();
-                logger.trace("Message from Client (" + uUID + "): " + message);
+                logger.trace("Message from Client (" + UUID + "): " + message);
                 message = message.replace("\uFEFF", "");
-                clientObserver.processMessage(uUID, message);
+                clientObserver.processMessage(UUID, message);
             } while (true);
         }catch (IOException e) {
-            logger.info("Connection to client (" + uUID + ") lost.");
-            clientObserver.onCrash(uUID);
+            logger.error("Connection to client (" + UUID + ") lost.");
+            clientObserver.onCrash(UUID);
         }
     }
 

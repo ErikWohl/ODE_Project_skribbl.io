@@ -11,6 +11,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import Controller.Enums.CommandEnum;
 import Controller.Service.GameService;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -58,14 +59,16 @@ public class SkribblServer implements Runnable, GameObserver {
                 lock.writeLock().lock();
                 try {
                     SkribblClient skribblClient = new SkribblClient(client);
-                    skribblClient.setUUID(UUID.randomUUID().toString());
                     PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
+
+                    skribblClient.setUUID(UUID.randomUUID().toString());
                     skribblClient.setPrintWriter(printWriter);
-                    // verbindung mit Server für crash
                     skribblClient.setClientObserver(gameService);
-                    clientMap.put(skribblClient.getuUID(), skribblClient);
+
+                    clientMap.put(skribblClient.getUUID(), skribblClient);
                     executor.submit(() -> skribblClient.run());
-                    printWriter.println("MSGHello Client");
+
+                    printWriter.println(CommandEnum.MESSAGE.getCommand() + "Hello Client");
                 } finally {
                     lock.writeLock().unlock();
                 }
@@ -78,7 +81,7 @@ public class SkribblServer implements Runnable, GameObserver {
 
     @Override
     public void onCrash(String UUID) {
-        logger.info("Removing client (" + UUID + ") from list.");
+        logger.error("Removing client (" + UUID + ") from list.");
         ReadWriteLock lock = new ReentrantReadWriteLock();
         lock.writeLock().lock();
         try {

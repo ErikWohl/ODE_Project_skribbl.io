@@ -19,7 +19,7 @@ public enum CommandEnum {
     ROUND_STARTED("RST"),
     ERROR("ERR");
 
-    public final String command;
+    private final String command;
     private CommandEnum(String command) {
         this.command = command;
     }
