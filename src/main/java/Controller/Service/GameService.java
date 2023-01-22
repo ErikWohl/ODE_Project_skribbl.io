@@ -129,11 +129,11 @@ public class GameService implements ClientObserver {
                 }
                 case START_GAME_ACKNOWLEDGEMENT: {
                     logger.info("Player (" + UUID + ") has acknowledged the game start.");
-                    playerHashMap.get(UUID).setGameState(GameStateEnum.STARTING);
-
                     ReadWriteLock lock = new ReentrantReadWriteLock();
                     try {
                         lock.writeLock().lock();
+                        playerHashMap.get(UUID).setGameState(GameStateEnum.STARTING);
+
                         int count = 0;
                         for(var player : playerHashMap.entrySet()) {
                             if(player.getValue().getGameState() == GameStateEnum.STARTING && player.getValue().getPlayerState() == PlayerStateEnum.NONE) {
@@ -179,11 +179,11 @@ public class GameService implements ClientObserver {
                 }
                 case ROUND_START_ACKNOWLEDGEMENT: {
                     logger.info("Player (" + UUID + ") has acknowledged the round start.");
-                    playerHashMap.get(UUID).setGameState(GameStateEnum.STARTED);
-
                     ReadWriteLock lock = new ReentrantReadWriteLock();
                     try {
                         lock.writeLock().lock();
+                        playerHashMap.get(UUID).setGameState(GameStateEnum.STARTED);
+
                         int count = 0;
                         for(var player : playerHashMap.entrySet()) {
                             if(player.getValue().getGameState() == GameStateEnum.STARTED && player.getValue().getPlayerState() != PlayerStateEnum.NONE) {
