@@ -12,6 +12,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import Controller.Enums.CommandEnum;
+import Controller.Service.GameObserver;
 import Controller.Service.GameService;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
@@ -108,17 +109,10 @@ public class SkribblServer implements Runnable, GameObserver {
     }
 
     @Override
-    public void startGame() {
-
-    }
-
-    @Override
-    public void startRound() {
-
-    }
-
-    @Override
-    public void endRound() {
-
+    public void broadcast(String msg) {
+        for(var client : clientMap.entrySet()) {
+            logger.trace("Sending broadcast to Client (" + client.getKey() + ") sent: " + msg);
+            client.getValue().getPrintWriter().println(msg);
+        }
     }
 }
