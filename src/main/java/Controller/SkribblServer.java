@@ -61,7 +61,7 @@ public class SkribblServer implements Runnable, GameObserver {
                 try {
                     SkribblClient skribblClient = new SkribblClient(client);
                     PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8), true);
-
+                    //todo: Während einem game sollen keine neuen clients angenommen werden.
                     skribblClient.setUUID(UUID.randomUUID().toString());
                     skribblClient.setPrintWriter(printWriter);
                     skribblClient.setClientObserver(gameService);

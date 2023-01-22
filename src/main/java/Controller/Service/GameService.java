@@ -16,18 +16,33 @@ public class GameService implements ClientObserver {
 
     private GameObserver gameObserver;
     private HashMap<String, Player> playerHashMap;
+    private Queue<Map.Entry<String, Player>> roundRanking;
     private final List<String> wordList;
     private int wordCount = 3;
     private List<String> choosableWords;
     private String chosenWord;
+    private boolean commence_guessing = false;
     private Random rnd = new Random();
     public GameService() {
         playerHashMap = new HashMap<>();
-        // Einbauen mehrerer Sprachen
+        //todo: Einbauen mehrerer Sprachen
         wordList = Arrays.asList("Test", "foo", "bar", "lorem", "ipsum");
     }
     public void setGameObserver(GameObserver gameObserver) {
         this.gameObserver = gameObserver;
+    }
+
+    public boolean isInitial(String UUID) {
+        return playerHashMap.get(UUID).getGameState() == GameStateEnum.INITIAL;
+    }
+    public boolean isStarting(String UUID) {
+        return playerHashMap.get(UUID).getGameState() == GameStateEnum.STARTING;
+    }
+    public boolean isDrawer(String UUID) {
+        return playerHashMap.get(UUID).getPlayerState() == PlayerStateEnum.DRAWER;
+    }
+    public boolean isGuesser(String UUID) {
+        return playerHashMap.get(UUID).getPlayerState() == PlayerStateEnum.GUESSER;
     }
 
     private void choosingPlayerStates() {
@@ -76,7 +91,6 @@ public class GameService implements ClientObserver {
             } else if(player.getValue().getPlayerState() == PlayerStateEnum.DRAWER) {
                 logger.info("Sending the drawer the actual word.");
                 gameObserver.unicast(player.getKey(), CommandEnum.ROUND_STARTED.getCommand()+chosenWord);
-
             } else {
                 logger.error("Player (" + player.getKey() + ") is in an illegal state.");
                 throw new RuntimeException();
@@ -89,13 +103,63 @@ public class GameService implements ClientObserver {
         }
         choosableWords = null;
         chosenWord = null;
+        roundRanking = null;
+        commence_guessing = false;
     }
+    public void guessingWords(String UUID, String message) {
+        String chosen = chosenWord.toLowerCase();
+        String word = message.substring(3).toLowerCase();
+        logger.debug("Player (" + UUID + ") guess: " + word);
+        if(!isGuesser(UUID)) {
+            return;
+        }
+        if(word.length() != chosen.length()) {
+            gameObserver.multicast(UUID, message);
+            return;
+        }
+
+        ReadWriteLock lock = new ReentrantReadWriteLock();
+        try {
+            lock.writeLock().lock();
+            if(word.equals(chosen)) {
+                logger.info("Player (" + UUID + ") guessed the word.");
+
+                roundRanking.add(new AbstractMap.SimpleEntry<String, Player>(UUID, playerHashMap.get(UUID)));
+                gameObserver.broadcast(CommandEnum.MESSAGE.getCommand() +  playerHashMap.get(UUID).getUsername() + " guessed the word!");
+                gameObserver.unicast(UUID, CommandEnum.CORRECT_GUESS.getCommand());
+                //todo: Überprüfung, ob die im Ranking vorhandenen UUIDs auch wirklich alle guesser sind
+                // Könnte jemand disconnected im ranking sein?
+                if(roundRanking.size() == playerHashMap.size() -1) {
+                    logger.info("Alle guessers guessed the word. Initiating round end.");
+                    gameObserver.broadcast(CommandEnum.ROUND_END_SUCCESS.getCommand());
+                }
+                return;
+            }
+        } finally {
+            lock.writeLock().unlock();
+        }
+
+
+        int count = 0;
+        for(int i = 0; i < chosen.length(); i++) {
+            if(word.charAt(i) == chosen.charAt(i)) {
+                count++;
+            }
+        }
+
+        if(count + 1 == chosen.length()) {
+            logger.info("Player (" + UUID + ") close guess. Word: " + chosenWord + " his: " + word);
+            gameObserver.unicast(UUID, CommandEnum.CLOSE_GUESS.getCommand() + word);
+            return;
+        }
+        gameObserver.multicast(UUID, message);
+    }
+
     @Override
     public void onStart(String UUID) {
         logger.info("New player created: " + UUID);
         playerHashMap.put(UUID, new Player("placeholderUsername"));
     }
-
     @Override
     public void processMessage(String UUID, String message) {
         String command = message.substring(0, 3);
@@ -104,7 +168,14 @@ public class GameService implements ClientObserver {
             CommandEnum commandEnum = CommandEnum.fromString(command);
 
             switch (commandEnum) {
-                case MESSAGE:
+                case MESSAGE: {
+                    if(commence_guessing) {
+                        guessingWords(UUID, message);
+                    } else {
+                        gameObserver.multicast(UUID, message);
+                    }
+                    break;
+                }
                 case CLEAR:
                 case DRAWING: {
                     gameObserver.multicast(UUID, message);
@@ -113,7 +184,7 @@ public class GameService implements ClientObserver {
 
                 case START_GAME_REQUEST: {
                     logger.info("Trying to start a game ...");
-
+                    //todo: Wenn es nur einen Spieler gibt soll kein spiel gestartet werden können
                     for(var player : playerHashMap.entrySet()) {
                         if(player.getValue().getGameState() != GameStateEnum.INITIAL && player.getValue().getPlayerState() != PlayerStateEnum.NONE) {
                             logger.error("Player (" + player.getKey() + ") was not in the correct state.");
@@ -193,6 +264,8 @@ public class GameService implements ClientObserver {
                         if(count == playerHashMap.size()) {
                             logger.info("All players acknowledged. Sending round started.");
                             sendChosenWord();
+                            commence_guessing = true;
+                            roundRanking = new LinkedList<>();
                         }
                     } finally {
                         lock.writeLock().unlock();
@@ -206,6 +279,35 @@ public class GameService implements ClientObserver {
                     logger.error("Player (" + UUID + ") has not acknowledged the round start.");
                     gameObserver.broadcast(CommandEnum.ERROR.getCommand());
                     reset();
+                    break;
+                }
+                case ROUND_END_ACKNOWLEDGEMENT: {
+                    logger.info("Player (" + UUID + ") has acknowledged the round end.");
+                    ReadWriteLock lock = new ReentrantReadWriteLock();
+                    try {
+                        lock.writeLock().lock();
+                        playerHashMap.get(UUID).setGameState(GameStateEnum.INITIAL);
+                        playerHashMap.get(UUID).setPlayerState(PlayerStateEnum.NONE);
+
+                        int count = 0;
+                        for(var player : playerHashMap.entrySet()) {
+                            if(player.getValue().getGameState() == GameStateEnum.INITIAL && player.getValue().getPlayerState() == PlayerStateEnum.NONE) {
+                                count++;
+                            }
+                        }
+                        if(count == playerHashMap.size()) {
+                            logger.info("All players acknowledged. Sending a start game.");
+                            gameObserver.broadcast(CommandEnum.START_GAME_REQUEST.getCommand());
+                            roundRanking = new LinkedList<>();
+                            chosenWord = null;
+                            commence_guessing = false;
+                        }
+                    } finally {
+                        lock.writeLock().unlock();
+                    }
+
+                    //todo: Abbruch, wenn zu viel Zeit vergangen ist.
+                    // Timer der nach 5 sek einen error schickt? Request timed out.
                     break;
                 }
             }
