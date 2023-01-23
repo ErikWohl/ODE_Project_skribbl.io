@@ -1,3 +1,4 @@
+import Controller.Enums.LanguageEnum;
 import Controller.Service.GameService;
 import Controller.SkribblServer;
 
@@ -20,7 +21,7 @@ public class Main {
     public static void main(String[] args) throws IOException {
         SkribblServer skribblServer = new SkribblServer();
 
-        GameService gameService = new GameService();
+        GameService gameService = new GameService(LanguageEnum.GERMAN);
         gameService.setGameObserver(skribblServer);
         skribblServer.setGameService(gameService);
         System.out.println("Server reachable at: " + skribblServer.getServerSocket().getInetAddress());
