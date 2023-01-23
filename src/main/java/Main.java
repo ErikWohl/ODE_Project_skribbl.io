@@ -1,3 +1,5 @@
+import Controller.Enums.LanguageEnum;
+import Controller.Service.GameService;
 import Controller.SkribblServer;
 
 import java.io.IOException;
@@ -12,10 +14,16 @@ import java.util.concurrent.Executors;
 //todo: @ewohlrab: Umändern auf UDP multicast sockets?
 // https://docs.oracle.com/javase/7/docs/api/java/net/MulticastSocket.html
 
+//todo: @ewohlrab FINITE STATE MACHINES FOR JAVA
+// https://github.com/davidmoten/state-machine
+// https://github.com/stateless4j/stateless4j
 public class Main {
     public static void main(String[] args) throws IOException {
         SkribblServer skribblServer = new SkribblServer();
 
+        GameService gameService = new GameService(LanguageEnum.GERMAN);
+        gameService.setGameObserver(skribblServer);
+        skribblServer.setGameService(gameService);
         System.out.println("Server reachable at: " + skribblServer.getServerSocket().getInetAddress());
         ExecutorService executor = Executors.newSingleThreadExecutor();
         executor.submit(() -> skribblServer.run());

@@ -6,28 +6,29 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
-
+import Controller.Service.ClientObserver;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.LogManager;
 public class SkribblClient implements Runnable {
     private Logger logger = LogManager.getLogger(SkribblClient.class);
     private Socket clientSocket;
-    private String uUID;
+    private String UUID;
     private PrintWriter printWriter;
     private BufferedReader bufferedReader;
+    private ClientObserver clientObserver;
 
-    private ServerObserver serverObserver;
+
     public SkribblClient(Socket clientSocket) {
         this.clientSocket = clientSocket;
     }
-    public String getuUID() {
-        return uUID;
+    public String getUUID() {
+        return UUID;
     }
-    public void setUUID(String uUID) {
-        this.uUID = uUID;
+    public void setUUID(String UUID) {
+        this.UUID = UUID;
     }
-    public void setServerObserver(ServerObserver serverObserver) {
-        this.serverObserver = serverObserver;
+    public void setClientObserver(ClientObserver clientObserver) {
+        this.clientObserver = clientObserver;
     }
     public PrintWriter getPrintWriter() {
         return printWriter;
@@ -38,49 +39,21 @@ public class SkribblClient implements Runnable {
     public Socket getClientSocket() {
         return clientSocket;
     }
-
     @Override
     public void run() {
         try {
             bufferedReader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream(), StandardCharsets.UTF_8));
+            clientObserver.onStart(UUID);
             do {
                 String message = bufferedReader.readLine();
-                logger.trace("Message from Client (" + uUID + "): " + message);
+                logger.trace("Message from Client (" + UUID + "): " + message);
                 message = message.replace("\uFEFF", "");
-
-                // Abarbeitung der frontend commands
-                // Commands sind immer 3 Zeichen lang.
-                String command = message.substring(0, 3);
-                CommandEnum commandEnum = CommandEnum.fromString(command);
-                switch (commandEnum) {
-                    case MESSAGE: {
-                        serverObserver.multicast(uUID, message);
-                        break;
-                    }
-                    // Wird gleich wie Drawing abgearbeitet
-                    case CLEAR:
-                    case DRAWING: {
-                        //todo: Nur vor Rundenbeginn oder wenn man Zeichner ist
-                        serverObserver.multicast(uUID, message);
-                        break;
-                    }
-                }
-
-
-
-
-
-
-
-
-
-
-
-                //serverObserver.onIncomingMessage(uUID, message);
+                clientObserver.processMessage(UUID, message);
             } while (true);
         }catch (IOException e) {
-            logger.info("Connection to client (" + uUID + ") lost.");
-            serverObserver.onCrash(uUID);
+            logger.error("Connection to client (" + UUID + ") lost.");
+            clientObserver.onCrash(UUID);
         }
     }
+
 }
