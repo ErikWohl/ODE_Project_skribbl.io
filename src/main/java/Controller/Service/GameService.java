@@ -8,8 +8,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.*;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class GameService implements ClientObserver {
     private Logger logger = LogManager.getLogger(GameService.class);
@@ -21,7 +19,12 @@ public class GameService implements ClientObserver {
     private int wordCount = 3;
     private List<String> choosableWords;
     private String chosenWord;
-    private boolean commence_guessing = false;
+    private volatile boolean commence_guessing = false;
+    private volatile boolean roles_set = false;
+    private volatile boolean sent_chosen_word = false;
+    private volatile boolean round_restart = false;
+
+
     private Random rnd = new Random();
     public GameService() {
         playerHashMap = new HashMap<>();
@@ -59,6 +62,7 @@ public class GameService implements ClientObserver {
                 logger.info("Player (" + list.get(i).getKey() + ") with username: " + list.get(i).getValue().getUsername() + " was chosen as a guesser.");
             }
         }
+
         logger.info("Sending guesser requests.");
         gameObserver.multicast(list.get(drawer).getKey(), CommandEnum.GUESSER_REQUEST.getCommand());
         logger.info("Sending special drawer request.");
@@ -97,14 +101,20 @@ public class GameService implements ClientObserver {
             }
         }
     }
-    private void reset() {
+    private void hardReset() {
         for(var player : playerHashMap.entrySet()) {
             player.getValue().resetStates();
         }
+        softReset();
+        round_restart = false;
+    }
+    private void softReset() {
         choosableWords = null;
         chosenWord = null;
         roundRanking = null;
         commence_guessing = false;
+        roles_set = false;
+        sent_chosen_word = false;
     }
     public void guessingWords(String UUID, String message) {
         String chosen = chosenWord.toLowerCase();
@@ -118,27 +128,20 @@ public class GameService implements ClientObserver {
             return;
         }
 
-        ReadWriteLock lock = new ReentrantReadWriteLock();
-        try {
-            lock.writeLock().lock();
-            if(word.equals(chosen)) {
-                logger.info("Player (" + UUID + ") guessed the word.");
+        if(word.equals(chosen)) {
+            logger.info("Player (" + UUID + ") guessed the word.");
 
-                roundRanking.add(new AbstractMap.SimpleEntry<String, Player>(UUID, playerHashMap.get(UUID)));
-                gameObserver.broadcast(CommandEnum.MESSAGE.getCommand() +  playerHashMap.get(UUID).getUsername() + " guessed the word!");
-                gameObserver.unicast(UUID, CommandEnum.CORRECT_GUESS.getCommand());
-                //todo: Überprüfung, ob die im Ranking vorhandenen UUIDs auch wirklich alle guesser sind
-                // Könnte jemand disconnected im ranking sein?
-                if(roundRanking.size() == playerHashMap.size() -1) {
-                    logger.info("Alle guessers guessed the word. Initiating round end.");
-                    gameObserver.broadcast(CommandEnum.ROUND_END_SUCCESS.getCommand());
-                }
-                return;
+            roundRanking.add(new AbstractMap.SimpleEntry<String, Player>(UUID, playerHashMap.get(UUID)));
+            gameObserver.broadcast(CommandEnum.MESSAGE.getCommand() + playerHashMap.get(UUID).getUsername() + " guessed the word!");
+            gameObserver.unicast(UUID, CommandEnum.CORRECT_GUESS.getCommand());
+            //todo: Überprüfung, ob die im Ranking vorhandenen UUIDs auch wirklich alle guesser sind
+            // Könnte jemand disconnected im ranking sein?
+            if (roundRanking.size() == playerHashMap.size() - 1) {
+                logger.info("Alle guessers guessed the word. Initiating round end.");
+                gameObserver.broadcast(CommandEnum.ROUND_END_SUCCESS.getCommand());
             }
-        } finally {
-            lock.writeLock().unlock();
+            return;
         }
-
 
         int count = 0;
         for(int i = 0; i < chosen.length(); i++) {
@@ -190,7 +193,7 @@ public class GameService implements ClientObserver {
                             logger.error("Player (" + player.getKey() + ") was not in the correct state.");
                             logger.error("Sending error message.");
                             gameObserver.broadcast(CommandEnum.ERROR.getCommand());
-                            reset();
+                            hardReset();
                             return;
                         }
                     }
@@ -200,23 +203,23 @@ public class GameService implements ClientObserver {
                 }
                 case START_GAME_ACKNOWLEDGEMENT: {
                     logger.info("Player (" + UUID + ") has acknowledged the game start.");
-                    ReadWriteLock lock = new ReentrantReadWriteLock();
-                    try {
-                        lock.writeLock().lock();
-                        playerHashMap.get(UUID).setGameState(GameStateEnum.STARTING);
+                    playerHashMap.get(UUID).setGameState(GameStateEnum.STARTING);
 
-                        int count = 0;
-                        for(var player : playerHashMap.entrySet()) {
-                            if(player.getValue().getGameState() == GameStateEnum.STARTING && player.getValue().getPlayerState() == PlayerStateEnum.NONE) {
-                                count++;
-                            }
+                    int count = 0;
+                    for(var player : playerHashMap.entrySet()) {
+                        if(player.getValue().getGameState() == GameStateEnum.STARTING && player.getValue().getPlayerState() == PlayerStateEnum.NONE) {
+                            count++;
                         }
-                        if(count == playerHashMap.size()) {
+                    }
+                    if(count == playerHashMap.size()) {
+                        logger.debug("Roles set: " + roles_set);
+                        if(!roles_set) {
+                            // Wird benötigt, da es trotz locking irgendwie zu mehrfachsetzung kommt
+                            roles_set = true;
+                            logger.debug("Roles set: " + roles_set);
                             logger.info("All players acknowledged. Choosing drawer and guessers.");
                             choosingPlayerStates();
                         }
-                    } finally {
-                        lock.writeLock().unlock();
                     }
 
                     //todo: Abbruch, wenn zu viel Zeit vergangen ist.
@@ -226,7 +229,7 @@ public class GameService implements ClientObserver {
                 case START_GAME_NOTACKNOWLEDGEMENT: {
                     logger.error("Player (" + UUID + ") has not acknowledged the game start.");
                     gameObserver.broadcast(CommandEnum.ERROR.getCommand());
-                    reset();
+                    hardReset();
                     break;
                 }
                 case DRAWER_ACKNOWLEDGEMENT:  {
@@ -238,7 +241,7 @@ public class GameService implements ClientObserver {
                             logger.error("Drawer (" + UUID + ") did not send a correct word.");
                             logger.error("Sending error message.");
                             gameObserver.broadcast(CommandEnum.ERROR.getCommand());
-                            reset();
+                            hardReset();
                             break;
                         }
                         chosenWord = word;
@@ -250,25 +253,25 @@ public class GameService implements ClientObserver {
                 }
                 case ROUND_START_ACKNOWLEDGEMENT: {
                     logger.info("Player (" + UUID + ") has acknowledged the round start.");
-                    ReadWriteLock lock = new ReentrantReadWriteLock();
-                    try {
-                        lock.writeLock().lock();
-                        playerHashMap.get(UUID).setGameState(GameStateEnum.STARTED);
+                    playerHashMap.get(UUID).setGameState(GameStateEnum.STARTED);
 
-                        int count = 0;
-                        for(var player : playerHashMap.entrySet()) {
-                            if(player.getValue().getGameState() == GameStateEnum.STARTED && player.getValue().getPlayerState() != PlayerStateEnum.NONE) {
-                                count++;
-                            }
+                    int count = 0;
+                    for(var player : playerHashMap.entrySet()) {
+                        if(player.getValue().getGameState() == GameStateEnum.STARTED && player.getValue().getPlayerState() != PlayerStateEnum.NONE) {
+                            count++;
                         }
-                        if(count == playerHashMap.size()) {
+                    }
+                    if(count == playerHashMap.size()) {
+                        logger.debug("sent_chosen_word set: " + sent_chosen_word);
+                        if(!sent_chosen_word) {
+                            // Wird benötigt, da es trotz locking irgendwie zu mehrfachsetzung kommt
+                            sent_chosen_word = true;
+                            logger.debug("sent_chosen_word set: " + sent_chosen_word);
                             logger.info("All players acknowledged. Sending round started.");
                             sendChosenWord();
                             commence_guessing = true;
                             roundRanking = new LinkedList<>();
                         }
-                    } finally {
-                        lock.writeLock().unlock();
                     }
 
                     //todo: Abbruch, wenn zu viel Zeit vergangen ist.
@@ -278,14 +281,12 @@ public class GameService implements ClientObserver {
                 case ROUND_START_NOTACKNOWLEDGEMENT: {
                     logger.error("Player (" + UUID + ") has not acknowledged the round start.");
                     gameObserver.broadcast(CommandEnum.ERROR.getCommand());
-                    reset();
+                    hardReset();
                     break;
                 }
                 case ROUND_END_ACKNOWLEDGEMENT: {
                     logger.info("Player (" + UUID + ") has acknowledged the round end.");
-                    ReadWriteLock lock = new ReentrantReadWriteLock();
-                    try {
-                        lock.writeLock().lock();
+
                         playerHashMap.get(UUID).setGameState(GameStateEnum.INITIAL);
                         playerHashMap.get(UUID).setPlayerState(PlayerStateEnum.NONE);
 
@@ -296,15 +297,17 @@ public class GameService implements ClientObserver {
                             }
                         }
                         if(count == playerHashMap.size()) {
-                            logger.info("All players acknowledged. Sending a start game.");
-                            gameObserver.broadcast(CommandEnum.START_GAME_REQUEST.getCommand());
-                            roundRanking = new LinkedList<>();
-                            chosenWord = null;
-                            commence_guessing = false;
+                            logger.debug("round_restart set: " + round_restart);
+                            if(!round_restart) {
+                                // Wird benötigt, da es trotz locking irgendwie zu mehrfachsetzung kommt
+                                round_restart = true;
+                                logger.debug("round_restart set: " + round_restart);
+                                logger.info("All players acknowledged. Sending a start game.");
+                                gameObserver.broadcast(CommandEnum.START_GAME_REQUEST.getCommand());
+                                softReset();
+                            }
                         }
-                    } finally {
-                        lock.writeLock().unlock();
-                    }
+
 
                     //todo: Abbruch, wenn zu viel Zeit vergangen ist.
                     // Timer der nach 5 sek einen error schickt? Request timed out.
@@ -321,7 +324,7 @@ public class GameService implements ClientObserver {
         logger.error("Player removed: " + UUID);
         playerHashMap.remove(UUID);
         gameObserver.broadcast(CommandEnum.ERROR.getCommand());
-        reset();
+        hardReset();
         gameObserver.onCrash(UUID);
     }
 }
